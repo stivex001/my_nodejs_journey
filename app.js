@@ -1,25 +1,25 @@
 const path = require('path')
 const express = require('express');
+const bodyParser = require('body-parser')
 
-const adminData = require('./routes/admin')
+const adminRoutes = require('./routes/admin')
 const shopRouter = require('./routes/shop')
+const errorCtrl = require("./controllers/error");
 
 const app = express();
 
 app.set('view engine', 'ejs')
 app.set('views')
 
-app.use(express.json());
+app.use(express.json({ extended: false}));
+app.use(bodyParser.urlencoded({ extended: false}))
 app.use(express.static(path.join(__dirname, 'public')));
 
 //Route middleware
-app.use('/admin', adminData.routes);
+app.use('/admin', adminRoutes);
 app.use(shopRouter)
 
-app.use('*', (req, res, next) => {
-    res.render('404', {pageTitle: 'page not found'})
-// res.status(404).sendFile(path.join(__dirname, 'views', '404.html'))
-})
+app.use('*', errorCtrl.pageNotFound)
 
 const port = process.env.PORT || 3000;
 
