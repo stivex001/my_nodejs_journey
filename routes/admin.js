@@ -14,6 +14,10 @@ router.get("/products", adminCtrl.getAdminProducts)
 
 router.get('/edit-product/:productId', adminCtrl.getEditProducts)
 
+router.post('/edit-product', adminCtrl.postEditProduct)
+
+router.post('/delete-product', adminCtrl.postDeleteProduct)
+
   // /add-product => POST
   router.post('/add-product', adminCtrl.postProducts)
 
