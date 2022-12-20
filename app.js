@@ -1,11 +1,14 @@
 const path = require("path");
 const express = require("express");
 const bodyParser = require("body-parser");
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 // setting up Mongoose
 const mongoose = require("mongoose");
-const connectionString =
-  "mongodb+srv://baistevoo:nWfQZxquK0y3O6sp@cluster0.4nljvas.mongodb.net/my_shop?retryWrites=true&w=majority";
+const connectionString = process.env.MONGO_CONNECT
+  
 
 mongoose.set("strictQuery", true);
 mongoose.connect(
