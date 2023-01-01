@@ -3,30 +3,34 @@ const Cart = require("../models/cartModel");
 const Order = require("../models/orderModel");
 const fs = require("fs");
 const path = require("path");
-const PDFDocument = require('pdfkit')
+const PDFDocument = require("pdfkit");
+const stripe = require("stripe")(process.env.STRIPE_KEY);
 
-const ITEMS_PER_PAGE = 1
+const ITEMS_PER_PAGE = 1;
 
 exports.getProducts = (req, res, next) => {
-  const page = +req.query.page || 1
-  let totalItems
+  const page = +req.query.page || 1;
+  let totalItems;
 
-  Product.find().countDocuments().then(numProducts => {
-    totalItems = numProducts
-    return Product.find().skip((page - 1) * ITEMS_PER_PAGE)
-    .limit(ITEMS_PER_PAGE)
-  })
-   .then((products) => {
+  Product.find()
+    .countDocuments()
+    .then((numProducts) => {
+      totalItems = numProducts;
+      return Product.find()
+        .skip((page - 1) * ITEMS_PER_PAGE)
+        .limit(ITEMS_PER_PAGE);
+    })
+    .then((products) => {
       res.render("shop/product-list", {
         prods: products,
         pageTitle: "Products",
         path: "/products",
-        currentPage : page,
+        currentPage: page,
         hasNextPage: ITEMS_PER_PAGE * page < totalItems,
         hasPreviousPage: page > 1,
         nextPage: page + 1,
         previousPage: page - 1,
-        lastPage: Math.ceil(totalItems / ITEMS_PER_PAGE)
+        lastPage: Math.ceil(totalItems / ITEMS_PER_PAGE),
       });
     })
     .catch((err) => {
@@ -48,25 +52,28 @@ exports.getProduct = (req, res, next) => {
 };
 
 exports.getIndex = (req, res, next) => {
-  const page = +req.query.page || 1
-  let totalItems
+  const page = +req.query.page || 1;
+  let totalItems;
 
-  Product.find().countDocuments().then(numProducts => {
-    totalItems = numProducts
-    return Product.find().skip((page - 1) * ITEMS_PER_PAGE)
-    .limit(ITEMS_PER_PAGE)
-  })
-   .then((products) => {
+  Product.find()
+    .countDocuments()
+    .then((numProducts) => {
+      totalItems = numProducts;
+      return Product.find()
+        .skip((page - 1) * ITEMS_PER_PAGE)
+        .limit(ITEMS_PER_PAGE);
+    })
+    .then((products) => {
       res.render("shop/index", {
         prods: products,
         pageTitle: "Shop",
         path: "/",
-        currentPage : page,
+        currentPage: page,
         hasNextPage: ITEMS_PER_PAGE * page < totalItems,
         hasPreviousPage: page > 1,
         nextPage: page + 1,
         previousPage: page - 1,
-        lastPage: Math.ceil(totalItems / ITEMS_PER_PAGE)
+        lastPage: Math.ceil(totalItems / ITEMS_PER_PAGE),
       });
     })
     .catch((err) => {
@@ -151,54 +158,89 @@ exports.getOrders = (req, res, next) => {
 };
 
 exports.getCheckout = (req, res, next) => {
-  res.render("shop/checkout", {
-    path: "/checkout",
-    pageTitle: "Checkout",
-  });
+  let products;
+  let total = 0;
+  req.user
+    .populate("cart.items.productId")
+    .then((user) => {
+      let total = 0;
+      products = user.cart.items;
+      products.forEach((p) => {
+        total += p.quantity * p.productId.price;
+      });
+
+      return stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: products.map((p) => {
+          return {
+            name: p.productId.title,
+            description: p.productId.description,
+            amount: p.productId.price * 100,
+            currency: "usd",
+            quantity: p.quantity,
+          };
+        }),
+        success_url:
+          req.protocol + "://" + req.get("host") + "/checkout/success",
+        cancel_url: req.protocol + "://" + req.get("host") + "/checkout/cancel",
+      });
+    })
+    .then((session) => {
+      res.render("shop/checkout", {
+        path: "/checkout",
+        pageTitle: "checkout",
+        products: products,
+        totalSum: total,
+        sessionId: session.id,
+      });
+    })
+    .catch((err) => {
+      console.log(err);
+    });
 };
 
 exports.getInvoice = (req, res, next) => {
   const orderId = req.params.orderId;
   Order.findById(orderId)
-    .then(order => {
+    .then((order) => {
       if (!order) {
-        return next(new Error('No order found.'));
+        return next(new Error("No order found."));
       }
       if (order.user.userId.toString() !== req.user._id.toString()) {
-        return next(new Error('Unauthorized'));
+        return next(new Error("Unauthorized"));
       }
-      const invoiceName = 'invoice-' + orderId + '.pdf';
-      const invoicePath = path.join('data', 'invoices', invoiceName);
+      const invoiceName = "invoice-" + orderId + ".pdf";
+      const invoicePath = path.join("data", "invoices", invoiceName);
 
       const pdfDoc = new PDFDocument();
-      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
-        'Content-Disposition',
+        "Content-Disposition",
         'inline; filename="' + invoiceName + '"'
       );
       pdfDoc.pipe(fs.createWriteStream(invoicePath));
       pdfDoc.pipe(res);
 
-      pdfDoc.fontSize(26).text('Invoice', {
-        underline: true
+      pdfDoc.fontSize(26).text("Invoice", {
+        underline: true,
       });
-      pdfDoc.text('-----------------------');
+      pdfDoc.text("-----------------------");
       let totalPrice = 0;
-      order.products.forEach(prod => {
+      order.products.forEach((prod) => {
         totalPrice += prod.quantity * prod.product.price;
         pdfDoc
           .fontSize(14)
           .text(
             prod.product.title +
-              ' - ' +
+              " - " +
               prod.quantity +
-              ' x ' +
-              '$' +
+              " x " +
+              "$" +
               prod.product.price
           );
       });
-      pdfDoc.text('---');
-      pdfDoc.fontSize(20).text('Total Price: $' + totalPrice);
+      pdfDoc.text("---");
+      pdfDoc.fontSize(20).text("Total Price: $" + totalPrice);
 
       pdfDoc.end();
       // fs.readFile(invoicePath, (err, data) => {
@@ -223,3 +265,5 @@ exports.getInvoice = (req, res, next) => {
     })
     .catch((err) => next(err));
 };
+
+
