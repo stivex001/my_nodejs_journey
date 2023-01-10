@@ -1,4 +1,6 @@
 const path = require("path");
+const fs = require('fs')
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const dotenv = require("dotenv");
@@ -7,6 +9,9 @@ const MongoDBStore = require("connect-mongodb-session")(session);
 const csrf = require("csurf");
 const flash = require("connect-flash");
 const multer = require("multer");
+const helmet = require('helmet')
+const compression = require('compression')
+const morgan = require('morgan')
 
 dotenv.config();
 
@@ -47,7 +52,13 @@ const errorCtrl = require("./controllers/error");
 
 const User = require("./models/userModel");
 
+const accessLogStream = fs.createWriteStream(path.join(__dirname, 'access.log'), {flags: 'a'})
+
+
 app.use(express.json());
+app.use(helmet())
+app.use(compression())
+app.use(morgan('combined', {stream: accessLogStream}))
 
 app.set("view engine", "ejs");
 app.set("views");
